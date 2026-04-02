@@ -24,6 +24,7 @@ import io.trino.plugin.exchange.filesystem.ExchangeSourceFile;
 import io.trino.plugin.exchange.filesystem.ExchangeStorageReader;
 import io.trino.plugin.exchange.filesystem.ExchangeStorageWriter;
 import io.trino.plugin.exchange.filesystem.FileStatus;
+import io.trino.plugin.exchange.filesystem.FileSystemExchangeConfig;
 import io.trino.plugin.exchange.filesystem.FileSystemExchangeStorage;
 import io.trino.plugin.exchange.filesystem.MetricsBuilder;
 import io.trino.spi.exchange.ExchangeId;
@@ -82,8 +83,8 @@ public abstract class AbstractTestAzureBlobFileSystemExchangeStorage
 
         String connectionString = "DefaultEndpointsProtocol=https;AccountName=%s;AccountKey=%s;EndpointSuffix=core.windows.net".formatted(account, accountKey);
         this.storage = new AzureBlobFileSystemExchangeStorage(
-                new ExchangeAzureConfig()
-                        .setAzureStorageConnectionString(connectionString));
+                new ExchangeAzureConfig().setAzureStorageConnectionString(connectionString),
+                new FileSystemExchangeConfig().setBaseDirectories(directoryUri("").toString()));
     }
 
     private boolean isHierarchicalNamespaceEnabled()

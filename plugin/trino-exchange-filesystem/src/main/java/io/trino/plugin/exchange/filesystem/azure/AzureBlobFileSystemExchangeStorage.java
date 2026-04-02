@@ -18,6 +18,7 @@ import com.azure.core.util.BinaryData;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.storage.blob.BlobContainerAsyncClient;
 import com.azure.storage.blob.BlobServiceAsyncClient;
+import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.batch.BlobBatchClientBuilder;
@@ -26,6 +27,7 @@ import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.DeleteSnapshotsOptionType;
 import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.specialized.BlockBlobAsyncClient;
+import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.azure.storage.common.policy.RetryPolicyType;
 import com.google.common.collect.ImmutableList;
@@ -48,6 +50,7 @@ import io.trino.plugin.exchange.filesystem.ExchangeSourceFile;
 import io.trino.plugin.exchange.filesystem.ExchangeStorageReader;
 import io.trino.plugin.exchange.filesystem.ExchangeStorageWriter;
 import io.trino.plugin.exchange.filesystem.FileStatus;
+import io.trino.plugin.exchange.filesystem.FileSystemExchangeConfig;
 import io.trino.plugin.exchange.filesystem.FileSystemExchangeStorage;
 import io.trino.plugin.exchange.filesystem.MetricsBuilder;
 import io.trino.plugin.exchange.filesystem.MetricsBuilder.CounterMetricBuilder;
@@ -93,9 +96,10 @@ public class AzureBlobFileSystemExchangeStorage
 {
     private final int blockSize;
     private final BlobServiceAsyncClient blobServiceAsyncClient;
+    private final boolean isHierarchical;
 
     @Inject
-    public AzureBlobFileSystemExchangeStorage(ExchangeAzureConfig config)
+    public AzureBlobFileSystemExchangeStorage(ExchangeAzureConfig config, FileSystemExchangeConfig fileSystemExchangeConfig)
     {
         this.blockSize = toIntExact(config.getAzureStorageBlockSize().toBytes());
 
@@ -116,7 +120,38 @@ public class AzureBlobFileSystemExchangeStorage
             blobServiceClientBuilder.credential(new DefaultAzureCredentialBuilder().build());
         }
 
+        this.isHierarchical = isHierarchical(fileSystemExchangeConfig.getBaseDirectories(), blobServiceClientBuilder.buildClient());
         this.blobServiceAsyncClient = blobServiceClientBuilder.buildAsyncClient();
+    }
+
+    private boolean isHierarchical(List<URI> baseUris, BlobServiceClient blobServiceClient)
+    {
+        checkArgument(!baseUris.isEmpty(), "baseUris cannot be empty");
+
+        List<URI> flatUris = new ArrayList<>();
+        List<URI> hierarchicalUris = new ArrayList<>();
+
+        for (URI baseUri : baseUris) {
+            String containerName = getContainerName(baseUri);
+            try {
+                BlockBlobClient blockBlobClient = blobServiceClient.getBlobContainerClient(containerName)
+                        .getBlobClient("/")
+                        .getBlockBlobClient();
+                if (blockBlobClient.exists()) {
+                    hierarchicalUris.add(baseUri);
+                }
+                else {
+                    flatUris.add(baseUri);
+                }
+            }
+            catch (RuntimeException e) {
+                throw new RuntimeException("Checking whether hierarchical namespace is enabled for the location %s failed".formatted(baseUri), e);
+            }
+        }
+        if (!flatUris.isEmpty() && !hierarchicalUris.isEmpty()) {
+            throw new IllegalArgumentException("Mixed flat and hierarchical baseUris; flat=%s; hierarchical=%s".formatted(flatUris, hierarchicalUris));
+        }
+        return !hierarchicalUris.isEmpty();
     }
 
     @Override
