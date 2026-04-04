@@ -4603,7 +4603,7 @@ class StatementAnalyzer
                     else if (element instanceof GroupingSets groupingSets) {
                         product = switch (groupingSets.getType()) {
                             case CUBE -> {
-                                int exponent = ((GroupingSets) element).getSets().size();
+                                int exponent = groupingSets.getSets().size();
                                 if (exponent > 30) {
                                     throw new ArithmeticException();
                                 }
@@ -5049,7 +5049,7 @@ class StatementAnalyzer
                     throw semanticException(TYPE_MISMATCH, node.getSelect(), "DISTINCT can only be applied to comparable types (actual: %s)", rowType.getFields().get(i).getType());
                 }
 
-                Optional<String> name = ((RowType) type).getFields().get(i).getName();
+                Optional<String> name = rowType.getFields().get(i).getName();
                 if (!allColumns.getAliases().isEmpty()) {
                     name = Optional.of(allColumns.getAliases().get(i).getValue());
                 }
