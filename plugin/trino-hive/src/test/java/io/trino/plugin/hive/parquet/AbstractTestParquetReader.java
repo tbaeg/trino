@@ -2267,7 +2267,7 @@ public abstract class AbstractTestParquetReader
         if (input == null) {
             return null;
         }
-        return sqlTimestampOf((long) input);
+        return sqlTimestampOf(3, (long) input);
     }
 
     private static Date intToDate(Integer input)
