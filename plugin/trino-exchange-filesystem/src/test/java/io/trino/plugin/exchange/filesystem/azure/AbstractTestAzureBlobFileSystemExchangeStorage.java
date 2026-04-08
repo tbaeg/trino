@@ -28,6 +28,7 @@ import io.trino.plugin.exchange.filesystem.FileSystemExchangeConfig;
 import io.trino.plugin.exchange.filesystem.FileSystemExchangeStorage;
 import io.trino.plugin.exchange.filesystem.MetricsBuilder;
 import io.trino.spi.exchange.ExchangeId;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -43,6 +44,7 @@ import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @TestInstance(Lifecycle.PER_CLASS)
 public abstract class AbstractTestAzureBlobFileSystemExchangeStorage
@@ -248,6 +250,56 @@ public abstract class AbstractTestAzureBlobFileSystemExchangeStorage
 
         List<FileStatus> files = getFutureValue(storage.listFilesRecursively(directoryUri("abort-dir/")));
         assertThat(files).isEmpty();
+    }
+
+    @Test
+    void testCreateDirectoriesRejectsUriOutsideBaseDirectory()
+    {
+        URI outsideUri = URI.create("abfs://other-container@otheraccount.dfs.core.windows.net/some-dir/");
+        assertUriOutsideBaseDirectoryRejected(() -> storage.createDirectories(outsideUri));
+    }
+
+    @Test
+    void testCreateExchangeStorageWriterRejectsUriOutsideBaseDirectory()
+    {
+        URI outsideUri = URI.create("abfs://other-container@otheraccount.dfs.core.windows.net/some-file");
+        assertUriOutsideBaseDirectoryRejected(() -> storage.createExchangeStorageWriter(outsideUri));
+    }
+
+    @Test
+    void testCreateEmptyFileRejectsUriOutsideBaseDirectory()
+    {
+        URI outsideUri = URI.create("abfs://other-container@otheraccount.dfs.core.windows.net/some-file");
+        assertUriOutsideBaseDirectoryRejected(() -> storage.createEmptyFile(outsideUri));
+    }
+
+    @Test
+    void testDeleteRecursivelyRejectsUriOutsideBaseDirectory()
+    {
+        URI outsideUri = URI.create("abfs://other-container@otheraccount.dfs.core.windows.net/some-dir/");
+        assertUriOutsideBaseDirectoryRejected(() -> storage.deleteRecursively(ImmutableList.of(outsideUri)));
+    }
+
+    @Test
+    void testListFilesRecursivelyRejectsUriOutsideBaseDirectory()
+    {
+        URI outsideUri = URI.create("abfs://other-container@otheraccount.dfs.core.windows.net/some-dir/");
+        assertUriOutsideBaseDirectoryRejected(() -> storage.listFilesRecursively(outsideUri));
+    }
+
+    @Test
+    void testCreateExchangeStorageReaderRejectsUriOutsideBaseDirectory()
+    {
+        URI outsideUri = URI.create("abfs://other-container@otheraccount.dfs.core.windows.net/some-file");
+        ExchangeSourceFile sourceFile = new ExchangeSourceFile(outsideUri, 100, ExchangeId.createRandomExchangeId(), 0, 0);
+        assertUriOutsideBaseDirectoryRejected(() -> storage.createExchangeStorageReader(ImmutableList.of(sourceFile), 1024, new MetricsBuilder()));
+    }
+
+    private static void assertUriOutsideBaseDirectoryRejected(ThrowingCallable callable)
+    {
+        assertThatThrownBy(callable)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("is not within any base directory");
     }
 
     private URI fileUri(String path)

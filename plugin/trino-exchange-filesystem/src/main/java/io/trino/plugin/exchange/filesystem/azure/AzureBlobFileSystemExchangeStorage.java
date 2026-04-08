@@ -102,6 +102,7 @@ import static java.util.Objects.requireNonNullElseGet;
 public class AzureBlobFileSystemExchangeStorage
         implements FileSystemExchangeStorage
 {
+    private final List<URI> baseDirectories;
     private final int blockSize;
     private final BlobServiceAsyncClient blobServiceAsyncClient;
     private final boolean isHierarchical;
@@ -110,6 +111,7 @@ public class AzureBlobFileSystemExchangeStorage
     @Inject
     public AzureBlobFileSystemExchangeStorage(ExchangeAzureConfig config, FileSystemExchangeConfig fileSystemExchangeConfig)
     {
+        this.baseDirectories = ImmutableList.copyOf(fileSystemExchangeConfig.getBaseDirectories());
         this.blockSize = toIntExact(config.getAzureStorageBlockSize().toBytes());
 
         RequestRetryOptions retryOptions = new RequestRetryOptions(RetryPolicyType.EXPONENTIAL, config.getMaxErrorRetries(), (Integer) null, null, null, null);
@@ -192,18 +194,21 @@ public class AzureBlobFileSystemExchangeStorage
     public void createDirectories(URI dir)
             throws IOException
     {
+        verifyUri(dir);
         // Nothing to do for Azure
     }
 
     @Override
     public ExchangeStorageReader createExchangeStorageReader(List<ExchangeSourceFile> sourceFiles, int maxPageStorageSize, MetricsBuilder metricsBuilder)
     {
+        sourceFiles.forEach(sourceFile -> verifyUri(sourceFile.getFileUri()));
         return new AzureExchangeStorageReader(blobServiceAsyncClient, sourceFiles, metricsBuilder, blockSize, maxPageStorageSize);
     }
 
     @Override
     public ExchangeStorageWriter createExchangeStorageWriter(URI file)
     {
+        verifyUri(file);
         String containerName = getContainerName(file);
         String blobName = getPath(file);
         BlockBlobAsyncClient blockBlobAsyncClient = blobServiceAsyncClient
@@ -216,6 +221,7 @@ public class AzureBlobFileSystemExchangeStorage
     @Override
     public ListenableFuture<Void> createEmptyFile(URI file)
     {
+        verifyUri(file);
         String containerName = getContainerName(file);
         String blobName = getPath(file);
         return translateFailures(toListenableFuture(blobServiceAsyncClient
@@ -228,6 +234,7 @@ public class AzureBlobFileSystemExchangeStorage
     @Override
     public ListenableFuture<Void> deleteRecursively(List<URI> directories)
     {
+        directories.forEach(this::verifyUri);
         if (isHierarchical) {
             return deleteGen2Recursively(directories);
         }
@@ -305,6 +312,7 @@ public class AzureBlobFileSystemExchangeStorage
     @Override
     public ListenableFuture<List<FileStatus>> listFilesRecursively(URI dir)
     {
+        verifyUri(dir);
         if (isHierarchical) {
             return listGen2FilesRecursively(dir);
         }
@@ -382,6 +390,16 @@ public class AzureBlobFileSystemExchangeStorage
     public int getWriteBufferSize()
     {
         return blockSize;
+    }
+
+    private void verifyUri(URI uri)
+    {
+        String uriString = uri.toString();
+        checkArgument(
+                baseDirectories.stream().anyMatch(baseDirectory -> uriString.startsWith(baseDirectory.toString())),
+                "URI %s is not within any base directory %s",
+                uri,
+                baseDirectories);
     }
 
     @PreDestroy
