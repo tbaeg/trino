@@ -66,6 +66,11 @@
         </dependency>
 
         <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-file-datalake</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>com.google.api</groupId>
             <artifactId>gax</artifactId>
             <exclusions>

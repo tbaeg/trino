@@ -30,6 +30,13 @@ import com.azure.storage.blob.specialized.BlockBlobAsyncClient;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.azure.storage.common.policy.RetryPolicyType;
+import com.azure.storage.file.datalake.DataLakeDirectoryAsyncClient;
+import com.azure.storage.file.datalake.DataLakeFileSystemAsyncClient;
+import com.azure.storage.file.datalake.DataLakeServiceAsyncClient;
+import com.azure.storage.file.datalake.DataLakeServiceClientBuilder;
+import com.azure.storage.file.datalake.models.ListPathsOptions;
+import com.azure.storage.file.datalake.models.PathItem;
+import com.azure.storage.file.datalake.options.DataLakePathDeleteOptions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Lists;
@@ -56,6 +63,7 @@ import io.trino.plugin.exchange.filesystem.MetricsBuilder;
 import io.trino.plugin.exchange.filesystem.MetricsBuilder.CounterMetricBuilder;
 import jakarta.annotation.PreDestroy;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.net.URI;
@@ -97,14 +105,16 @@ public class AzureBlobFileSystemExchangeStorage
     private final int blockSize;
     private final BlobServiceAsyncClient blobServiceAsyncClient;
     private final boolean isHierarchical;
+    private final Optional<DataLakeServiceAsyncClient> dataLakeServiceAsyncClient;
 
     @Inject
     public AzureBlobFileSystemExchangeStorage(ExchangeAzureConfig config, FileSystemExchangeConfig fileSystemExchangeConfig)
     {
         this.blockSize = toIntExact(config.getAzureStorageBlockSize().toBytes());
 
+        RequestRetryOptions retryOptions = new RequestRetryOptions(RetryPolicyType.EXPONENTIAL, config.getMaxErrorRetries(), (Integer) null, null, null, null);
         BlobServiceClientBuilder blobServiceClientBuilder = new BlobServiceClientBuilder()
-                .retryOptions(new RequestRetryOptions(RetryPolicyType.EXPONENTIAL, config.getMaxErrorRetries(), (Integer) null, null, null, null));
+                .retryOptions(retryOptions);
         Optional<String> connectionString = config.getAzureStorageConnectionString();
         Optional<String> endpoint = config.getAzureStorageEndpoint();
 
@@ -122,6 +132,22 @@ public class AzureBlobFileSystemExchangeStorage
 
         this.isHierarchical = isHierarchical(fileSystemExchangeConfig.getBaseDirectories(), blobServiceClientBuilder.buildClient());
         this.blobServiceAsyncClient = blobServiceClientBuilder.buildAsyncClient();
+
+        if (this.isHierarchical) {
+            DataLakeServiceClientBuilder dataLakeServiceClientBuilder = new DataLakeServiceClientBuilder()
+                    .retryOptions(retryOptions);
+            if (connectionString.isPresent()) {
+                dataLakeServiceClientBuilder.connectionString(connectionString.get());
+            }
+            else {
+                dataLakeServiceClientBuilder.endpoint(endpoint.get());
+                dataLakeServiceClientBuilder.credential(new DefaultAzureCredentialBuilder().build());
+            }
+            this.dataLakeServiceAsyncClient = Optional.of(dataLakeServiceClientBuilder.buildAsyncClient());
+        }
+        else {
+            this.dataLakeServiceAsyncClient = Optional.empty();
+        }
     }
 
     private boolean isHierarchical(List<URI> baseUris, BlobServiceClient blobServiceClient)
@@ -134,6 +160,14 @@ public class AzureBlobFileSystemExchangeStorage
         for (URI baseUri : baseUris) {
             String containerName = getContainerName(baseUri);
             try {
+                // Azure suggest checking if container uses HMS with:
+                // createBlobContainerClient(location, Optional.empty())
+                //    .getServiceClient()
+                //    .getAccountInfo()
+                //    .isHierarchicalNamespaceEnabled()
+
+                // It requires extra permissions to access container metadata, which is not needed for normal container use.
+                // Scheme used below just requires permissions for normal container access.
                 BlockBlobClient blockBlobClient = blobServiceClient.getBlobContainerClient(containerName)
                         .getBlobClient("/")
                         .getBlockBlobClient();
@@ -194,6 +228,52 @@ public class AzureBlobFileSystemExchangeStorage
     @Override
     public ListenableFuture<Void> deleteRecursively(List<URI> directories)
     {
+        if (isHierarchical) {
+            return deleteGen2Recursively(directories);
+        }
+        return deleteBlobRecursively(directories);
+    }
+
+    private ListenableFuture<Void> deleteGen2Recursively(List<URI> directories)
+    {
+        DataLakePathDeleteOptions deleteRecursiveOptions = new DataLakePathDeleteOptions().setIsRecursive(true);
+        ImmutableList.Builder<ListenableFuture<Void>> deleteFutures = ImmutableList.builder();
+        for (URI dir : directories) {
+            checkArgument(isDirectory(dir), "deleteGen2Recursively called on file uri %s", dir);
+            String containerName = getContainerName(dir);
+            String directoryPath = getPath(dir);
+
+            DataLakeFileSystemAsyncClient fileSystemClient = dataLakeServiceAsyncClient.orElseThrow()
+                    .getFileSystemAsyncClient(containerName);
+
+            if (directoryPath.isEmpty()) {
+                deleteFutures.add(toListenableFuture(fileSystemClient.listPaths()
+                        .flatMap(pathItem -> {
+                            if (pathItem.isDirectory()) {
+                                return fileSystemClient.deleteDirectoryIfExistsWithResponse(pathItem.getName(), deleteRecursiveOptions).then();
+                            }
+                            return fileSystemClient.deleteFileIfExists(pathItem.getName()).then();
+                        })
+                        .then()
+                        .toFuture()));
+            }
+            else {
+                DataLakeDirectoryAsyncClient directoryClient = fileSystemClient.getDirectoryAsyncClient(directoryPath);
+                deleteFutures.add(toListenableFuture(directoryClient.exists()
+                        .flatMap(exists -> {
+                            if (exists) {
+                                return directoryClient.deleteIfExistsWithResponse(deleteRecursiveOptions).then();
+                            }
+                            return Mono.empty();
+                        })
+                        .toFuture()));
+            }
+        }
+        return translateFailures(Futures.allAsList(deleteFutures.build()));
+    }
+
+    private ListenableFuture<Void> deleteBlobRecursively(List<URI> directories)
+    {
         ImmutableMultimap.Builder<String, ListenableFuture<List<PagedResponse<BlobItem>>>> containerToListObjectsFuturesBuilder = ImmutableMultimap.builder();
         directories.forEach(dir -> containerToListObjectsFuturesBuilder.put(
                 getContainerName(dir),
@@ -225,6 +305,14 @@ public class AzureBlobFileSystemExchangeStorage
     @Override
     public ListenableFuture<List<FileStatus>> listFilesRecursively(URI dir)
     {
+        if (isHierarchical) {
+            return listGen2FilesRecursively(dir);
+        }
+        return listBlobFilesRecursively(dir);
+    }
+
+    private ListenableFuture<List<FileStatus>> listBlobFilesRecursively(URI dir)
+    {
         return Futures.transform(listObjectsRecursively(dir), pagedResponseList -> {
             ImmutableList.Builder<FileStatus> fileStatuses = ImmutableList.builder();
             for (PagedResponse<BlobItem> pagedResponse : pagedResponseList) {
@@ -243,6 +331,51 @@ public class AzureBlobFileSystemExchangeStorage
             }
             return fileStatuses.build();
         }, directExecutor());
+    }
+
+    private ListenableFuture<List<FileStatus>> listGen2FilesRecursively(URI dir)
+    {
+        checkArgument(isDirectory(dir), "listGen2FilesRecursively called on file uri %s", dir);
+
+        String containerName = getContainerName(dir);
+        String directoryPath = getPath(dir);
+
+        DataLakeFileSystemAsyncClient fileSystemClient = dataLakeServiceAsyncClient.orElseThrow()
+                .getFileSystemAsyncClient(containerName);
+
+        if (directoryPath.isEmpty()) {
+            return toListenableFuture(fileSystemClient.listPaths(new ListPathsOptions().setRecursive(true))
+                    .filter(pathItem -> !pathItem.isDirectory())
+                    .map(pathItem -> toFileStatus(dir, pathItem))
+                    .collectList()
+                    .toFuture());
+        }
+
+        DataLakeDirectoryAsyncClient directoryClient = fileSystemClient.getDirectoryAsyncClient(directoryPath);
+        return toListenableFuture(directoryClient.exists()
+                .<List<FileStatus>>flatMap(exists -> {
+                    if (!exists) {
+                        return Mono.just(List.of());
+                    }
+                    return directoryClient.listPaths(true, false, null)
+                            .filter(pathItem -> !pathItem.isDirectory())
+                            .map(pathItem -> toFileStatus(dir, pathItem))
+                            .collectList()
+                            .map(List::copyOf);
+                })
+                .toFuture());
+    }
+
+    private static FileStatus toFileStatus(URI dir, PathItem pathItem)
+    {
+        URI uri;
+        try {
+            uri = new URI(dir.getScheme(), dir.getUserInfo(), dir.getHost(), -1, PATH_SEPARATOR + pathItem.getName(), null, dir.getFragment());
+        }
+        catch (URISyntaxException e) {
+            throw new IllegalArgumentException(e);
+        }
+        return new FileStatus(uri.toString(), pathItem.getContentLength());
     }
 
     @Override
