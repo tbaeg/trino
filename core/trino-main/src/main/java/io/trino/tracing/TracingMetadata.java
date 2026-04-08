@@ -85,6 +85,7 @@ import io.trino.spi.connector.SaveMode;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SortItem;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.spi.connector.TableColumnsMetadata;
 import io.trino.spi.connector.TableFunctionApplicationResult;
 import io.trino.spi.connector.TableScanRedirectApplicationResult;
@@ -201,6 +202,15 @@ public class TracingMetadata
         Span span = startSpan("getSystemTable", tableName);
         try (var _ = scopedSpan(span)) {
             return delegate.getSystemTable(session, tableName);
+        }
+    }
+
+    @Override
+    public Optional<SystemView> getSystemView(Session session, QualifiedObjectName tableName)
+    {
+        Span span = startSpan("getSystemView", tableName);
+        try (var _ = scopedSpan(span)) {
+            return delegate.getSystemView(session, tableName);
         }
     }
 

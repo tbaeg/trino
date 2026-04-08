@@ -25,6 +25,7 @@ import io.trino.spi.connector.ConnectorTableCredentials;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTableMetadata;
 import io.trino.spi.connector.ConnectorTableVersion;
+import io.trino.spi.connector.ConnectorViewDefinition;
 import io.trino.spi.connector.ConnectorWritableTableHandle;
 import io.trino.spi.connector.Constraint;
 import io.trino.spi.connector.ConstraintApplicationResult;
@@ -32,12 +33,14 @@ import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SchemaTablePrefix;
 import io.trino.spi.connector.SystemColumnHandle;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.spi.function.table.ConnectorTableFunctionHandle;
 import io.trino.spi.predicate.TupleDomain;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -52,18 +55,21 @@ import static java.util.Objects.requireNonNull;
 public class SystemTablesMetadata
         implements ConnectorMetadata
 {
-    private final SystemTablesProvider tables;
+    private final SystemTablesViewsProvider tablesAndViews;
 
-    public SystemTablesMetadata(SystemTablesProvider tables)
+    public SystemTablesMetadata(SystemTablesViewsProvider tablesAndViews)
     {
-        this.tables = requireNonNull(tables, "tables is null");
+        this.tablesAndViews = requireNonNull(tablesAndViews, "tables is null");
     }
 
     @Override
     public List<String> listSchemaNames(ConnectorSession session)
     {
-        return tables.listSystemTables(session).stream()
-                .map(table -> table.getTableMetadata().getTable().getSchemaName())
+        return Stream.concat(
+                        tablesAndViews.listSystemTables().stream()
+                                .map(table -> table.getTableMetadata().getTable().getSchemaName()),
+                        tablesAndViews.listSystemViews().stream()
+                                .map(view -> view.getSchemaTableName().getSchemaName()))
                 .distinct()
                 .collect(toImmutableList());
     }
@@ -71,16 +77,46 @@ public class SystemTablesMetadata
     @Override
     public ConnectorTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName, Optional<ConnectorTableVersion> startVersion, Optional<ConnectorTableVersion> endVersion)
     {
-        Optional<SystemTable> table = tables.getSystemTable(session, tableName);
-        if (table.isEmpty()) {
-            return null;
+        boolean exists = tablesAndViews.getSystemTable(session, tableName).isPresent() ||
+                tablesAndViews.getSystemView(session, tableName).isPresent();
+
+        if (exists) {
+            if (startVersion.isPresent() || endVersion.isPresent()) {
+                throw new TrinoException(NOT_SUPPORTED, "This connector does not support versioned tables");
+            }
+            return SystemTableHandle.fromSchemaTableName(tableName);
         }
 
-        if (startVersion.isPresent() || endVersion.isPresent()) {
-            throw new TrinoException(NOT_SUPPORTED, "This connector does not support versioned tables");
-        }
+        return null;
+    }
 
-        return SystemTableHandle.fromSchemaTableName(tableName);
+    @Override
+    public boolean isView(ConnectorSession session, SchemaTableName viewName)
+    {
+        return tablesAndViews.getSystemView(session, viewName).isPresent();
+    }
+
+    @Override
+    public List<SchemaTableName> listViews(ConnectorSession session, Optional<String> schemaName)
+    {
+        return tablesAndViews.listSystemViews().stream()
+                .map(SystemView::getSchemaTableName)
+                .collect(toImmutableList());
+    }
+
+    @Override
+    public Map<SchemaTableName, ConnectorViewDefinition> getViews(ConnectorSession session, Optional<String> schemaName)
+    {
+        return tablesAndViews.listSystemViews().stream()
+                .collect(toImmutableMap(
+                        SystemView::getSchemaTableName,
+                        SystemView::getViewDefinition));
+    }
+
+    @Override
+    public Optional<ConnectorViewDefinition> getView(ConnectorSession session, SchemaTableName viewName)
+    {
+        return tablesAndViews.getSystemView(session, viewName).map(SystemView::getViewDefinition);
     }
 
     @Override
@@ -92,10 +128,14 @@ public class SystemTablesMetadata
     @Override
     public List<SchemaTableName> listTables(ConnectorSession session, Optional<String> schemaName)
     {
-        return tables.listSystemTables(session).stream()
-                .map(SystemTable::getTableMetadata)
-                .map(ConnectorTableMetadata::getTable)
-                .filter(table -> schemaName.isEmpty() || table.getSchemaName().equals(schemaName.get()))
+        return Stream.concat(
+                        tablesAndViews.listSystemTables().stream()
+                                .map(SystemTable::getTableMetadata)
+                                .map(ConnectorTableMetadata::getTable),
+                        tablesAndViews.listSystemViews().stream()
+                                .map(SystemView::getSchemaTableName))
+                .filter(name -> schemaName.isEmpty() || name.getSchemaName().equals(schemaName.get()))
+                .distinct()
                 .collect(toImmutableList());
     }
 
@@ -123,7 +163,7 @@ public class SystemTablesMetadata
     private SystemTable checkAndGetTable(ConnectorSession session, ConnectorTableHandle tableHandle)
     {
         SystemTableHandle systemTableHandle = (SystemTableHandle) tableHandle;
-        return tables.getSystemTable(session, systemTableHandle.schemaTableName())
+        return tablesAndViews.getSystemTable(session, systemTableHandle.schemaTableName())
                 // table might disappear in the meantime
                 .orElseThrow(() -> new TrinoException(NOT_FOUND, format("Table '%s' not found", systemTableHandle.schemaTableName())));
     }
@@ -136,13 +176,13 @@ public class SystemTablesMetadata
         if (prefix.getTable().isPresent()) {
             // if table is concrete we just use tables.getSystemTable to support tables which are not listable
             SchemaTableName tableName = prefix.toSchemaTableName();
-            return tables.getSystemTable(session, tableName)
+            return tablesAndViews.getSystemTable(session, tableName)
                     .map(systemTable -> singletonMap(tableName, systemTable.getTableMetadata().getColumns()))
                     .orElseGet(ImmutableMap::of);
         }
 
         ImmutableMap.Builder<SchemaTableName, List<ColumnMetadata>> builder = ImmutableMap.builder();
-        for (SystemTable table : tables.listSystemTables(session)) {
+        for (SystemTable table : tablesAndViews.listSystemTables()) {
             ConnectorTableMetadata tableMetadata = table.getTableMetadata();
             if (prefix.matches(tableMetadata.getTable())) {
                 builder.put(tableMetadata.getTable(), tableMetadata.getColumns());

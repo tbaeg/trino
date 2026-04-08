@@ -34,6 +34,7 @@ import io.trino.spi.connector.ConnectorSecurityContext;
 import io.trino.spi.connector.ConnectorSplitManager;
 import io.trino.spi.connector.SchemaRoutineName;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.spi.connector.TableProcedureMetadata;
 import io.trino.spi.function.FunctionKind;
 import io.trino.spi.function.FunctionProvider;
@@ -70,6 +71,7 @@ public class ConnectorServices
     private final CatalogHandle catalogHandle;
     private final Connector connector;
     private final Set<SystemTable> systemTables;
+    private final Set<SystemView> systemViews;
     private final CatalogProcedures procedures;
     private final CatalogTableProcedures tableProcedures;
     private final Optional<FunctionProvider> functionProvider;
@@ -101,6 +103,10 @@ public class ConnectorServices
         Set<SystemTable> systemTables = connector.getSystemTables();
         requireNonNull(systemTables, format("Connector '%s' returned a null system tables set", catalogHandle));
         this.systemTables = ImmutableSet.copyOf(systemTables);
+
+        Set<SystemView> systemViews = connector.getSystemViews();
+        requireNonNull(systemViews, format("Connector '%s' returned a null system views set", catalogHandle));
+        this.systemViews = ImmutableSet.copyOf(systemViews);
 
         Set<Procedure> procedures = connector.getProcedures();
         requireNonNull(procedures, format("Connector '%s' returned a null procedures set", catalogHandle));
@@ -236,6 +242,11 @@ public class ConnectorServices
     public Set<SystemTable> getSystemTables()
     {
         return systemTables;
+    }
+
+    public Set<SystemView> getSystemViews()
+    {
+        return systemViews;
     }
 
     public CatalogProcedures getProcedures()

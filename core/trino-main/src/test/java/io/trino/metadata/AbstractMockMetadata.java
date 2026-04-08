@@ -59,6 +59,7 @@ import io.trino.spi.connector.SaveMode;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SortItem;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.spi.connector.TableColumnsMetadata;
 import io.trino.spi.connector.TableFunctionApplicationResult;
 import io.trino.spi.connector.TableScanRedirectApplicationResult;
@@ -190,6 +191,12 @@ public abstract class AbstractMockMetadata
 
     @Override
     public Optional<SystemTable> getSystemTable(Session session, QualifiedObjectName tableName)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Optional<SystemView> getSystemView(Session session, QualifiedObjectName tableName)
     {
         throw new UnsupportedOperationException();
     }

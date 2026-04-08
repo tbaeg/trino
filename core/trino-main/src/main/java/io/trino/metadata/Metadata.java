@@ -55,6 +55,7 @@ import io.trino.spi.connector.SaveMode;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SortItem;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.spi.connector.TableColumnsMetadata;
 import io.trino.spi.connector.TableFunctionApplicationResult;
 import io.trino.spi.connector.TableScanRedirectApplicationResult;
@@ -115,6 +116,8 @@ public interface Metadata
     Optional<TableHandle> getTableHandle(Session session, QualifiedObjectName tableName);
 
     Optional<SystemTable> getSystemTable(Session session, QualifiedObjectName tableName);
+
+    Optional<SystemView> getSystemView(Session session, QualifiedObjectName tableName);
 
     Optional<TableExecuteHandle> getTableHandleForExecute(
             Session session,

@@ -93,6 +93,7 @@ public class TestSystemMetadataConnector
                 "VALUES 'comment for test_schema1.test_table1'",
                 ImmutableMultiset.<String>builder()
                         .addCopies("ConnectorMetadata.getSystemTable(schema=test_schema1, table=test_table1)", 4)
+                        .addCopies("ConnectorMetadata.getSystemView(schema=test_schema1, table=test_table1)", 4)
                         .add("ConnectorMetadata.getMaterializedView(schema=test_schema1, table=test_table1)")
                         .add("ConnectorMetadata.getView(schema=test_schema1, table=test_table1)")
                         .add("ConnectorMetadata.redirectTable(schema=test_schema1, table=test_table1)")
@@ -106,6 +107,7 @@ public class TestSystemMetadataConnector
                 "SELECT '' WHERE false",
                 ImmutableMultiset.<String>builder()
                         .addCopies("ConnectorMetadata.getSystemTable(schema=test_schema1, table=does_not_exist)", 4)
+                        .addCopies("ConnectorMetadata.getSystemView(schema=test_schema1, table=does_not_exist)", 4)
                         .add("ConnectorMetadata.getMaterializedView(schema=test_schema1, table=does_not_exist)")
                         .add("ConnectorMetadata.getView(schema=test_schema1, table=does_not_exist)")
                         .add("ConnectorMetadata.redirectTable(schema=test_schema1, table=does_not_exist)")
@@ -118,6 +120,7 @@ public class TestSystemMetadataConnector
                 "SELECT '' WHERE false",
                 ImmutableMultiset.<String>builder()
                         .addCopies("ConnectorMetadata.getSystemTable(schema=wrong_schema1, table=test_table1)", 4)
+                        .addCopies("ConnectorMetadata.getSystemView(schema=wrong_schema1, table=test_table1)", 4)
                         .add("ConnectorMetadata.getMaterializedView(schema=wrong_schema1, table=test_table1)")
                         .add("ConnectorMetadata.getView(schema=wrong_schema1, table=test_table1)")
                         .add("ConnectorMetadata.redirectTable(schema=wrong_schema1, table=test_table1)")
@@ -130,6 +133,7 @@ public class TestSystemMetadataConnector
                 "SELECT '' WHERE false",
                 ImmutableMultiset.<String>builder()
                         .addCopies("ConnectorMetadata.getSystemTable(schema=wrong_schema1, table=test_table1)", 4)
+                        .addCopies("ConnectorMetadata.getSystemView(schema=wrong_schema1, table=test_table1)", 4)
                         .add("ConnectorMetadata.getMaterializedView(schema=wrong_schema1, table=test_table1)")
                         .add("ConnectorMetadata.getView(schema=wrong_schema1, table=test_table1)")
                         .add("ConnectorMetadata.redirectTable(schema=wrong_schema1, table=test_table1)")

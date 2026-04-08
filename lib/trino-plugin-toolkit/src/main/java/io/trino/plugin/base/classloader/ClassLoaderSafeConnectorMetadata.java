@@ -65,6 +65,7 @@ import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SchemaTablePrefix;
 import io.trino.spi.connector.SortItem;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.spi.connector.TableColumnsMetadata;
 import io.trino.spi.connector.TableFunctionApplicationResult;
 import io.trino.spi.connector.TableScanRedirectApplicationResult;
@@ -257,6 +258,14 @@ public class ClassLoaderSafeConnectorMetadata
     {
         try (ThreadContextClassLoader _ = new ThreadContextClassLoader(classLoader)) {
             return delegate.getSystemTable(session, tableName);
+        }
+    }
+
+    @Override
+    public Optional<SystemView> getSystemView(ConnectorSession session, SchemaTableName tableName)
+    {
+        try (ThreadContextClassLoader _ = new ThreadContextClassLoader(classLoader)) {
+            return delegate.getSystemView(session, tableName);
         }
     }
 

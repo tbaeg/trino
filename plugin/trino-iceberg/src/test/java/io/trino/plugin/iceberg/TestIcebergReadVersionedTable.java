@@ -99,7 +99,7 @@ public class TestIcebergReadVersionedTable
     public void testSystemTables()
     {
         // TODO https://github.com/trinodb/trino/issues/12920
-        assertQueryFails("SELECT * FROM \"test_iceberg_read_versioned_table$partitions\" FOR VERSION AS OF " + v1SnapshotId,
+        assertQueryFails("SELECT * FROM \"test_iceberg_read_versioned_table$files\" FOR VERSION AS OF " + v1SnapshotId,
                 "This connector does not support versioned tables");
     }
 

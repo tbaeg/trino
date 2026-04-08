@@ -87,6 +87,7 @@ import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SchemaTablePrefix;
 import io.trino.spi.connector.SortItem;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.spi.connector.TableColumnsMetadata;
 import io.trino.spi.connector.TableFunctionApplicationResult;
 import io.trino.spi.connector.TableScanRedirectApplicationResult;
@@ -425,6 +426,25 @@ public final class MetadataManager
             ConnectorMetadata metadata = catalogMetadata.getMetadataFor(session, catalogHandle);
 
             return metadata.getSystemTable(session.toConnectorSession(catalogHandle), tableName.asSchemaTableName());
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<SystemView> getSystemView(Session session, QualifiedObjectName tableName)
+    {
+        requireNonNull(session, "session is null");
+        requireNonNull(tableName, "tableName is null");
+
+        Optional<CatalogMetadata> catalog = getOptionalCatalogMetadata(session, tableName.catalogName());
+        if (catalog.isPresent()) {
+            CatalogMetadata catalogMetadata = catalog.get();
+
+            // we query only main connector for runtime system tables
+            CatalogHandle catalogHandle = catalogMetadata.getCatalogHandle();
+            ConnectorMetadata metadata = catalogMetadata.getMetadataFor(session, catalogHandle);
+
+            return metadata.getSystemView(session.toConnectorSession(catalogHandle), tableName.asSchemaTableName());
         }
         return Optional.empty();
     }
@@ -1660,6 +1680,7 @@ public final class MetadataManager
         Optional<CatalogMetadata> catalog = getOptionalCatalogMetadata(session, viewName.catalogName());
         if (catalog.isPresent()) {
             CatalogMetadata catalogMetadata = catalog.get();
+            // TODO should this always throw when start/end is set?
             CatalogHandle catalogHandle = catalogMetadata.getCatalogHandle(session, viewName, Optional.empty(), Optional.empty());
             ConnectorMetadata metadata = catalogMetadata.getMetadataFor(session, catalogHandle);
 
@@ -1884,6 +1905,7 @@ public final class MetadataManager
         Optional<CatalogMetadata> catalog = getOptionalCatalogMetadata(session, viewName.catalogName());
         if (catalog.isPresent()) {
             CatalogMetadata catalogMetadata = catalog.get();
+            // TODO should this always throw when start/end is set?
             CatalogHandle catalogHandle = catalogMetadata.getCatalogHandle(session, viewName, Optional.empty(), Optional.empty());
             ConnectorMetadata metadata = catalogMetadata.getMetadataFor(session, catalogHandle);
 

@@ -197,6 +197,17 @@ public interface ConnectorMetadata
     }
 
     /**
+     * Returns the system view for the specified view name, if one exists.
+     * The system views handled via this method differ form those returned by {@link Connector#getSystemViews()}.
+     * The former mechanism allows dynamic resolution of system views, while the latter is
+     * based on static list of system views built during startup.
+     */
+    default Optional<SystemView> getSystemView(ConnectorSession session, SchemaTableName tableName)
+    {
+        return Optional.empty();
+    }
+
+    /**
      * Attempt to push down partitioning into the table. If a connector can provide
      * data for the table using the specified partitioning, it should return a
      * table handle that when passed to {@link #getTableProperties(ConnectorSession, ConnectorTableHandle)}

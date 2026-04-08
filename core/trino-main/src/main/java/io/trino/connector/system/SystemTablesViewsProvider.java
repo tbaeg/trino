@@ -20,6 +20,7 @@ import io.trino.metadata.QualifiedObjectName;
 import io.trino.spi.connector.ConnectorSession;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SystemTable;
+import io.trino.spi.connector.SystemView;
 import io.trino.transaction.TransactionManager;
 
 import java.util.Map;
@@ -30,30 +31,49 @@ import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 
-public class SystemTablesProvider
+public class SystemTablesViewsProvider
 {
     private final TransactionManager transactionManager;
     private final Metadata metadata;
     private final String catalogName;
     private final Set<SystemTable> systemTables;
+    private final Set<SystemView> systemViews;
     private final Map<SchemaTableName, SystemTable> systemTablesMap;
+    private final Map<SchemaTableName, SystemView> systemViewsMap;
 
-    public SystemTablesProvider(TransactionManager transactionManager, Metadata metadata, String catalogName, Set<SystemTable> systemTables)
+    public SystemTablesViewsProvider(
+            TransactionManager transactionManager,
+            Metadata metadata,
+            String catalogName,
+            Set<SystemTable> systemTables,
+            Set<SystemView> systemViews)
     {
+        // TODO ensure there is no table or view with the same name
         this.transactionManager = requireNonNull(transactionManager, "transactionManager is null");
         this.metadata = requireNonNull(metadata, "metadata is null");
         this.catalogName = requireNonNull(catalogName, "catalogName is null");
         this.systemTables = requireNonNull(systemTables, "systemTables is null");
+        this.systemViews = requireNonNull(systemViews, "systemViews is null");
         this.systemTablesMap = systemTables.stream()
                 .collect(toImmutableMap(
                         table -> table.getTableMetadata().getTable(),
                         identity()));
+        this.systemViewsMap = systemViews.stream()
+                .collect(toImmutableMap(
+                        SystemView::getSchemaTableName,
+                        identity()));
     }
 
-    public Set<SystemTable> listSystemTables(ConnectorSession session)
+    public Set<SystemTable> listSystemTables()
     {
-        // dynamic are not listed, so ony list static tables
+        // dynamic are not listed, so only list static tables
         return systemTables;
+    }
+
+    public Set<SystemView> listSystemViews()
+    {
+        // dynamic are not listed, so only list static tables
+        return systemViews;
     }
 
     public Optional<SystemTable> getSystemTable(ConnectorSession session, SchemaTableName tableName)
@@ -73,6 +93,27 @@ public class SystemTablesProvider
         // dynamic tables that are not SINGLE_COORDINATOR mode need to implement the
         // PageSourceProvider interface for SystemSplit through the Connector interface
         return metadata.getSystemTable(
+                ((FullConnectorSession) session).getSession(),
+                new QualifiedObjectName(catalogName, tableName.getSchemaName(), tableName.getTableName()));
+    }
+
+    public Optional<SystemView> getSystemView(ConnectorSession session, SchemaTableName tableName)
+    {
+        Optional<SystemView> staticSystemView = Optional.ofNullable(systemViewsMap.get(tableName));
+        if (staticSystemView.isPresent()) {
+            return staticSystemView;
+        }
+
+        // This means there is no known static table, but that doesn't mean a dynamic table must exist.
+        // This node could have a different config that causes that table to not exist.
+        if (!isCoordinatorTransaction(session)) {
+            // this is a session from another coordinator, so there are no dynamic tables here for that session
+            return Optional.empty();
+        }
+
+        // dynamic tables that are not SINGLE_COORDINATOR mode need to implement the
+        // PageSourceProvider interface for SystemSplit through the Connector interface
+        return metadata.getSystemView(
                 ((FullConnectorSession) session).getSession(),
                 new QualifiedObjectName(catalogName, tableName.getSchemaName(), tableName.getTableName()));
     }

@@ -124,6 +124,14 @@ public interface Connector
     }
 
     /**
+     * @return the set of system views provided by this connector
+     */
+    default Set<SystemView> getSystemViews()
+    {
+        return emptySet();
+    }
+
+    /**
      * @return the set of procedures provided by this connector
      */
     default Optional<FunctionProvider> getFunctionProvider()

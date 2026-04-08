@@ -20,7 +20,7 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Tracer;
 import io.trino.connector.informationschema.InformationSchemaConnector;
 import io.trino.connector.system.SystemConnector;
-import io.trino.connector.system.SystemTablesProvider;
+import io.trino.connector.system.SystemTablesViewsProvider;
 import io.trino.execution.scheduler.NodeSchedulerConfig;
 import io.trino.metadata.Metadata;
 import io.trino.node.InternalNode;
@@ -155,11 +155,12 @@ public class DefaultCatalogFactory
                         accessControl,
                         maxPrefetchedInformationSchemaPrefixes));
 
-        SystemTablesProvider systemTablesProvider = new SystemTablesProvider(
+        SystemTablesViewsProvider systemTablesViewsProvider = new SystemTablesViewsProvider(
                 transactionManager,
                 metadata,
                 catalogHandle.getCatalogName().toString(),
-                catalogConnector.getSystemTables());
+                catalogConnector.getSystemTables(),
+                catalogConnector.getSystemViews());
 
         ConnectorServices systemConnector = new ConnectorServices(
                 tracer,
@@ -167,7 +168,7 @@ public class DefaultCatalogFactory
                 new SystemConnector(
                         currentNode,
                         nodeManager,
-                        systemTablesProvider,
+                        systemTablesViewsProvider,
                         transactionId -> transactionManager.getConnectorTransaction(transactionId, catalogHandle),
                         accessControl,
                         catalogHandle.getCatalogName().toString(),

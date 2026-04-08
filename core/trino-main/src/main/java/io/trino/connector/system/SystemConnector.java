@@ -42,7 +42,7 @@ public class SystemConnector
     public SystemConnector(
             InternalNode currentNode,
             InternalNodeManager nodeManager,
-            SystemTablesProvider tables,
+            SystemTablesViewsProvider tables,
             Function<TransactionId, ConnectorTransactionHandle> transactionHandleFunction,
             AccessControl accessControl,
             String catalogName,

@@ -61,12 +61,12 @@ import static java.util.Objects.requireNonNull;
 public class SystemPageSourceProvider
         implements ConnectorPageSourceProvider
 {
-    private final SystemTablesProvider tables;
+    private final SystemTablesViewsProvider tables;
     private final AccessControl accessControl;
     private final String catalogName;
     private final Optional<ConnectorPageSourceProvider> connectorPageSourceProvider;
 
-    public SystemPageSourceProvider(SystemTablesProvider tables, AccessControl accessControl, String catalogName, Optional<ConnectorPageSourceProviderFactory> pageSourceProviderFactory)
+    public SystemPageSourceProvider(SystemTablesViewsProvider tables, AccessControl accessControl, String catalogName, Optional<ConnectorPageSourceProviderFactory> pageSourceProviderFactory)
     {
         this.tables = requireNonNull(tables, "tables is null");
         this.accessControl = requireNonNull(accessControl, "accessControl is null");

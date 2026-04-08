@@ -47,9 +47,9 @@ public class SystemSplitManager
 {
     private final InternalNode currentNode;
     private final InternalNodeManager nodeManager;
-    private final SystemTablesProvider tables;
+    private final SystemTablesViewsProvider tables;
 
-    public SystemSplitManager(InternalNode currentNode, InternalNodeManager nodeManager, SystemTablesProvider tables)
+    public SystemSplitManager(InternalNode currentNode, InternalNodeManager nodeManager, SystemTablesViewsProvider tables)
     {
         this.currentNode = requireNonNull(currentNode, "currentNode is null");
         this.nodeManager = requireNonNull(nodeManager, "nodeManager is null");
