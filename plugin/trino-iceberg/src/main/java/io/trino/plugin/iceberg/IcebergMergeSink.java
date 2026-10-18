@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -135,6 +136,9 @@ public class IcebergMergeSink
         Block rowPositionBlock = fields.get(1);
         Block partitionSpecIdBlock = fields.get(2);
         Block partitionDataBlock = fields.get(3);
+        Block fileRecordCountBlock = fields.get(5);
+        Block fileSizeBlock = fields.get(6);
+        Block fileFormatBlock = fields.get(7);
         // Rows for the same file arrive in runs, so the map is consulted only when the file path changes
         Slice currentFilePath = null;
         FileDeletion currentDeletion = null;
@@ -148,7 +152,12 @@ public class IcebergMergeSink
                 if (currentDeletion == null) {
                     int partitionSpecId = INTEGER.getInt(partitionSpecIdBlock, position);
                     String partitionData = VarcharType.VARCHAR.getSlice(partitionDataBlock, position).toStringUtf8();
-                    currentDeletion = new FileDeletion(partitionSpecId, partitionData);
+                    currentDeletion = new FileDeletion(
+                            partitionSpecId,
+                            partitionData,
+                            BIGINT.getLong(fileRecordCountBlock, position),
+                            BIGINT.getLong(fileSizeBlock, position),
+                            IcebergFileFormat.valueOf(VarcharType.VARCHAR.getSlice(fileFormatBlock, position).toStringUtf8()));
                     // Copy the path so the map key does not pin the whole file path block
                     Slice filePathCopy = filePath.copy();
                     fileDeletions.put(filePathCopy, currentDeletion);
@@ -212,7 +221,10 @@ public class IcebergMergeSink
                         Optional.of(dataFilePath.toStringUtf8()),
                         Optional.empty(), // unused for v3
                         SortOrder.unsorted().orderId(),
-                        Optional.of(deletionVector.serialize().getBytes()));
+                        Optional.of(deletionVector.serialize().getBytes()),
+                        OptionalLong.of(deletion.fileRecordCount()),
+                        OptionalLong.of(deletion.fileSizeInBytes()),
+                        Optional.of(deletion.fileFormat()));
                 fragments.add(wrappedBuffer(jsonCodec.toJsonBytes(task)));
             }));
         }
@@ -320,13 +332,19 @@ public class IcebergMergeSink
     {
         private final int partitionSpecId;
         private final String partitionDataJson;
+        private final long fileRecordCount;
+        private final long fileSizeInBytes;
+        private final IcebergFileFormat fileFormat;
         private final DeletionVector.Builder rowsToDelete = DeletionVector.builder();
         private long rowsToDeleteRetainedBytes;
 
-        public FileDeletion(int partitionSpecId, String partitionDataJson)
+        public FileDeletion(int partitionSpecId, String partitionDataJson, long fileRecordCount, long fileSizeInBytes, IcebergFileFormat fileFormat)
         {
             this.partitionSpecId = partitionSpecId;
             this.partitionDataJson = requireNonNull(partitionDataJson, "partitionDataJson is null");
+            this.fileRecordCount = fileRecordCount;
+            this.fileSizeInBytes = fileSizeInBytes;
+            this.fileFormat = requireNonNull(fileFormat, "fileFormat is null");
         }
 
         // Returns the change in retained bytes of the deletion vector since the previous call
@@ -345,6 +363,21 @@ public class IcebergMergeSink
         public String partitionDataJson()
         {
             return partitionDataJson;
+        }
+
+        public long fileRecordCount()
+        {
+            return fileRecordCount;
+        }
+
+        public long fileSizeInBytes()
+        {
+            return fileSizeInBytes;
+        }
+
+        public IcebergFileFormat fileFormat()
+        {
+            return fileFormat;
         }
 
         public DeletionVector.Builder rowsToDelete()

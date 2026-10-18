@@ -1568,6 +1568,28 @@ public class TestIcebergV3
     }
 
     @Test
+    void testFullyDeletedDataFileUnderPreviousPartitionSpecIsDropped()
+    {
+        try (TestTable table = newTrinoTable("test_full_delete_previous_spec_v3", "(id INTEGER, part INTEGER) WITH (format = 'ORC', format_version = 3, partitioning = ARRAY['part'])")) {
+            assertUpdate("INSERT INTO " + table.getName() + " SELECT x, x % 2 FROM UNNEST(sequence(1, 100)) t(x)", 100);
+            assertUpdate("ALTER TABLE " + table.getName() + " SET PROPERTIES partitioning = ARRAY['bucket(id, 4)']");
+            assertUpdate("INSERT INTO " + table.getName() + " SELECT x, x % 2 FROM UNNEST(sequence(101, 200)) t(x)", 100);
+            long dataFiles = (long) computeScalar("SELECT count(*) FROM \"" + table.getName() + "$files\" WHERE content = 0");
+            long droppedDataFiles = (long) computeScalar("SELECT count(*) FROM \"" + table.getName() + "$files\" WHERE content = 0 AND partition.part = 0");
+
+            // Delete every row of the files written under the previous spec for part = 0
+            assertUpdate("DELETE FROM " + table.getName() + " WHERE id <= 100 AND part = 0", 50);
+            assertThat(query("SELECT count(*), count_if(id <= 100) FROM " + table.getName()))
+                    .matches("VALUES (BIGINT '150', BIGINT '50')");
+
+            assertThat(query("SELECT count(*) FROM \"" + table.getName() + "$files\" WHERE content = 0"))
+                    .matches("VALUES (BIGINT '%s')".formatted(dataFiles - droppedDataFiles));
+            assertThat(query("SELECT count(*) FROM \"" + table.getName() + "$files\" WHERE content = 1"))
+                    .matches("VALUES (BIGINT '0')");
+        }
+    }
+
+    @Test
     void testV2ToV3MigrationWithDeletes()
     {
         try (TestTable table = newTrinoTable("trino_v2_to_v3_dv_migration", "(id INTEGER, grp INTEGER) WITH (format = 'PARQUET', format_version = 2)")) {

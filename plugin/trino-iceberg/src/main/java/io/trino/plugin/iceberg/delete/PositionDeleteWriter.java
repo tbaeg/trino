@@ -33,6 +33,7 @@ import org.apache.iceberg.io.LocationProvider;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import static io.airlift.slice.Slices.utf8Slice;
 import static io.trino.spi.type.TypeUtils.writeNativeValue;
@@ -92,6 +93,9 @@ public class PositionDeleteWriter
                 Optional.of(dataFilePath),
                 writer.getFileMetrics().splitOffsets(),
                 SortOrder.unsorted().orderId(),
+                Optional.empty(),
+                OptionalLong.empty(),
+                OptionalLong.empty(),
                 Optional.empty());
     }
 

@@ -68,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -610,6 +611,9 @@ public class IcebergPageSink
                 Optional.empty(),
                 fileMetrics.splitOffsets(),
                 sortOrderId,
+                Optional.empty(),
+                OptionalLong.empty(),
+                OptionalLong.empty(),
                 Optional.empty());
 
         commitTasks.add(wrappedBuffer(jsonCodec.toJsonBytes(task)));

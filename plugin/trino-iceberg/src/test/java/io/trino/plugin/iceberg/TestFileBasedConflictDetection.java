@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.stream.Stream;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -218,6 +219,9 @@ class TestFileBasedConflictDetection
                 Optional.empty(),
                 Optional.empty(),
                 SortOrder.unsorted().orderId(),
+                Optional.empty(),
+                OptionalLong.empty(),
+                OptionalLong.empty(),
                 Optional.empty());
         // Remove file from version with previous partition specification
         CommitTaskData commitTaskData2 = new CommitTaskData(
@@ -231,6 +235,9 @@ class TestFileBasedConflictDetection
                 Optional.empty(),
                 Optional.empty(),
                 SortOrder.unsorted().orderId(),
+                Optional.empty(),
+                OptionalLong.empty(),
+                OptionalLong.empty(),
                 Optional.empty());
         TupleDomain<IcebergColumnHandle> icebergColumnHandleTupleDomain = extractTupleDomains(icebergTable, List.of(commitTaskData1, commitTaskData2));
         assertThat(icebergColumnHandleTupleDomain.getDomains().orElseThrow()).isEmpty();
@@ -252,6 +259,9 @@ class TestFileBasedConflictDetection
                 Optional.empty(),
                 Optional.empty(),
                 SortOrder.unsorted().orderId(),
+                Optional.empty(),
+                OptionalLong.empty(),
+                OptionalLong.empty(),
                 Optional.empty());
         CommitTaskData commitTaskData2 = new CommitTaskData(
                 "test_location/data/old.parquet",
@@ -264,6 +274,9 @@ class TestFileBasedConflictDetection
                 Optional.empty(),
                 Optional.empty(),
                 SortOrder.unsorted().orderId(),
+                Optional.empty(),
+                OptionalLong.empty(),
+                OptionalLong.empty(),
                 Optional.empty());
 
         return List.of(commitTaskData1, commitTaskData2);

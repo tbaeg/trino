@@ -185,6 +185,9 @@ final class TestIcebergMergeSink
         BlockBuilder partitionSpecIdBuilder = INTEGER.createFixedSizeBlockBuilder(rowCount);
         BlockBuilder partitionDataBuilder = VARCHAR.createBlockBuilder(null, rowCount);
         BlockBuilder sourceRowIdBuilder = BIGINT.createFixedSizeBlockBuilder(rowCount);
+        BlockBuilder fileRecordCountBuilder = BIGINT.createFixedSizeBlockBuilder(rowCount);
+        BlockBuilder fileSizeBuilder = BIGINT.createFixedSizeBlockBuilder(rowCount);
+        BlockBuilder fileFormatBuilder = VARCHAR.createBlockBuilder(null, rowCount);
         for (Deletion deletion : deletions) {
             BIGINT.writeLong(dataBuilder, deletion.rowPosition());
             TINYINT.writeByte(operationBuilder, (byte) DELETE_OPERATION_NUMBER);
@@ -194,6 +197,9 @@ final class TestIcebergMergeSink
             INTEGER.writeInt(partitionSpecIdBuilder, 0);
             VARCHAR.writeString(partitionDataBuilder, "{}");
             sourceRowIdBuilder.appendNull();
+            BIGINT.writeLong(fileRecordCountBuilder, Long.MAX_VALUE);
+            BIGINT.writeLong(fileSizeBuilder, 0);
+            VARCHAR.writeString(fileFormatBuilder, IcebergFileFormat.PARQUET.name());
         }
         Block rowIdBlock = RowBlock.fromFieldBlocks(rowCount, new Block[] {
                 filePathBuilder.build(),
@@ -201,6 +207,9 @@ final class TestIcebergMergeSink
                 partitionSpecIdBuilder.build(),
                 partitionDataBuilder.build(),
                 sourceRowIdBuilder.build(),
+                fileRecordCountBuilder.build(),
+                fileSizeBuilder.build(),
+                fileFormatBuilder.build(),
         });
         return new Page(dataBuilder.build(), operationBuilder.build(), caseNumberBuilder.build(), rowIdBlock);
     }

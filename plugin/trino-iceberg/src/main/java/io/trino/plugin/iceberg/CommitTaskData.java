@@ -18,6 +18,7 @@ import org.apache.iceberg.SortOrder;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
@@ -33,7 +34,10 @@ public record CommitTaskData(
         Optional<String> referencedDataFile,
         Optional<List<Long>> fileSplitOffsets,
         int sortOrderId,
-        Optional<byte[]> serializedDeletionVector)
+        Optional<byte[]> serializedDeletionVector,
+        OptionalLong referencedDataFileRecordCount,
+        OptionalLong referencedDataFileSizeInBytes,
+        Optional<IcebergFileFormat> referencedDataFileFormat)
 {
     public CommitTaskData
     {
@@ -46,5 +50,8 @@ public record CommitTaskData(
         requireNonNull(fileSplitOffsets, "fileSplitOffsets is null");
         checkArgument(content == FileContent.DATA || sortOrderId == SortOrder.unsorted().orderId(), "Sorted order id can be present only for data files");
         requireNonNull(serializedDeletionVector, "serializedDeletionVector is null");
+        requireNonNull(referencedDataFileRecordCount, "referencedDataFileRecordCount is null");
+        requireNonNull(referencedDataFileSizeInBytes, "referencedDataFileSizeInBytes is null");
+        requireNonNull(referencedDataFileFormat, "referencedDataFileFormat is null");
     }
 }
