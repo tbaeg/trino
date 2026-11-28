@@ -23,7 +23,8 @@ import java.util.Optional;
 public interface TableFunctionDataProcessor
 {
     /**
-     * This method processes a portion of data. It is called multiple times until the partition is fully processed.
+     * This method processes a portion of data. It is called multiple times until the partition, or the whole input
+     * of a single table with row semantics, is fully processed.
      *
      * @param input a tuple of {@link Page} including one page for each table function's input table.
      *         Pages list is ordered according to the corresponding argument specifications in {@link ConnectorTableFunction}.
